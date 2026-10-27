@@ -1,5 +1,6 @@
 // Toda chamada ao Apps Script passa por aqui.
 // Content-Type text/plain evita o pré-voo de CORS.
+// Mostra um pop-up "Carregando..." se a chamada demorar mais de meio segundo.
 const Api = {
   // ações automáticas, que rodam sozinhas e não mostram o pop-up
   SILENCIOSAS: ['heartbeat', 'presenca'],
