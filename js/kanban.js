@@ -8,6 +8,8 @@ const Kanban = {
   dados: null,
   filtro: '',
   quadro: null,
+  alvo: '',        // usuária escolhida (só gerente/admin)
+  usuarios: null,  // lista de usuárias para o seletor
 
   // ---------- utilitários ----------
   el(tag, classe, texto) {
@@ -34,11 +36,31 @@ const Kanban = {
   },
 
   // ---------- carregar ----------
+  ehGestor() {
+    const a = String((App.perfil && App.perfil.acesso) || '').toUpperCase();
+    return a === 'ADMIN' || a === 'GERENTE';
+  },
+
+  async carregarUsuarios() {
+    const r = await Api.chamar('usuarios');
+    this.usuarios = r.ok
+      ? r.usuarios.filter(function (u) { return u.perfil === 'usuario' && u.ativo; })
+          .map(function (u) { return u.login; })
+      : [];
+  },
+
+  resetar() { this.dados = null; this.filtro = ''; this.alvo = ''; this.usuarios = null; },
+
   async iniciar() {
     const area = document.getElementById('conteudo');
     area.textContent = 'Carregando...';
-    const r = await Api.chamar('kanban');
-    if (!r.ok) { area.textContent = r.erro || 'Não foi possível carregar o kanban.'; return; }
+    if (this.ehGestor() && this.usuarios === null) await this.carregarUsuarios();
+    const r = await Api.chamar('kanban', this.alvo ? { verUsuario: this.alvo } : {});
+    if (!r.ok) {
+      this.alvo = '';
+      area.textContent = r.erro || 'Não foi possível carregar o kanban.';
+      return;
+    }
     this.dados = r;
     this.desenhar();
   },
@@ -56,10 +78,29 @@ const Kanban = {
     const recarregar = this.el('button', 'kb-recarregar', 'Atualizar');
     recarregar.type = 'button';
     recarregar.addEventListener('click', () => this.iniciar());
+    if (this.ehGestor() && this.usuarios && this.usuarios.length) {
+      const sel = this.el('select', 'kb-usuario');
+      const o0 = this.el('option', '', 'Visão padrão');
+      o0.value = '';
+      sel.appendChild(o0);
+      this.usuarios.forEach((u) => {
+        const o = this.el('option', '', 'Quadro de ' + u);
+        o.value = u;
+        sel.appendChild(o);
+      });
+      sel.value = this.alvo;
+      sel.addEventListener('change', () => { this.alvo = sel.value; this.iniciar(); });
+      barra.appendChild(sel);
+    }
     barra.append(busca, recarregar);
+    barra.appendChild(this.el('span', 'kb-total', 'Total: ' + this.dados.total));
 
     this.quadro = this.el('div', 'kb-quadro');
-    area.append(barra, this.quadro);
+    area.appendChild(barra);
+    if (typeof this.dados.aviso === 'string' && this.dados.aviso) {
+      area.appendChild(this.el('p', 'kb-aviso-topo', this.dados.aviso));
+    }
+    area.appendChild(this.quadro);
     this.desenharColunas();
   },
 
