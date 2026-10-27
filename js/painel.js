@@ -1,9 +1,10 @@
 // Painel de gestão (gerente/admin): usuários, estados e cobertura.
-// Usa as ações: usuarios, salvarEstados, salvarUsuario, ativarUsuario, resetSenha, cobertura.
+// Usa as ações: usuarios, salvarEstados, salvarUsuario, ativarUsuario, resetSenha, cobertura, me.
 const Painel = {
   UFS: ['ac','al','am','ap','ba','ce','df','es','go','ma','mg','ms','mt','pa','pb','pe','pi','pr','rj','rn','ro','rr','rs','sc','se','sp','to'],
   usuarios: [],
   semDona: [],
+  eu: { acesso: '', usuario: '' },
 
   el(tag, classe, texto) { return Kanban.el(tag, classe, texto); },
 
@@ -12,14 +13,27 @@ const Painel = {
     return String(v || '').split(/[,;\s]+/).map(function (x) { return x.toLowerCase(); }).filter(Boolean);
   },
 
+  ehAdmin() { return String(this.eu.acesso || '').toUpperCase() === 'ADMIN'; },
+
+  // Mesma regra do servidor: admin reseta qualquer senha; gerente só a de usuárias e a própria.
+  podeResetar(u) {
+    if (this.ehAdmin()) return true;
+    const mesma = String(u.login || '').toUpperCase() === String(this.eu.usuario || '').toUpperCase();
+    return String(u.perfil || '').toLowerCase() === 'usuario' || mesma;
+  },
+
   async iniciar() {
     const area = document.getElementById('conteudo');
     area.textContent = 'Carregando...';
-    const r = await Api.chamar('usuarios');
+    const [r, c, m] = await Promise.all([
+      Api.chamar('usuarios'),
+      Api.chamar('cobertura'),
+      Api.chamar('me')
+    ]);
     if (!r.ok) { area.textContent = r.erro || 'Não foi possível carregar os usuários.'; return; }
     this.usuarios = r.usuarios;
-    const c = await Api.chamar('cobertura');
     this.semDona = c.ok ? (c.semDona || []) : [];
+    this.eu = (m && m.ok && m.perfil) ? m.perfil : { acesso: '', usuario: '' };
     this.desenhar();
   },
 
@@ -81,16 +95,19 @@ const Painel = {
     tdA.appendChild(chk);
     tr.appendChild(tdA);
 
+    // O botão só aparece quando o servidor também permitiria o reset
     const tdR = this.el('td');
-    const reset = this.el('button', 'pn-btn pn-sec', 'Resetar senha');
-    reset.type = 'button';
-    reset.addEventListener('click', async () => {
-      const nova = prompt('Nova senha provisória para ' + u.login + ' (mín. 6 caracteres):');
-      if (!nova) return;
-      const r = await Api.chamar('resetSenha', { login: u.login, novaSenha: nova });
-      Kanban.aviso(r.ok ? 'Senha de ' + u.login + ' redefinida. Ela troca no próximo acesso.' : (r.erro || 'Falha ao redefinir.'));
-    });
-    tdR.appendChild(reset);
+    if (this.podeResetar(u)) {
+      const reset = this.el('button', 'pn-btn pn-sec', 'Resetar senha');
+      reset.type = 'button';
+      reset.addEventListener('click', async () => {
+        const nova = prompt('Nova senha provisória para ' + u.login + ' (mín. 6 caracteres):');
+        if (!nova) return;
+        const r = await Api.chamar('resetSenha', { login: u.login, novaSenha: nova });
+        Kanban.aviso(r.ok ? 'Senha de ' + u.login + ' redefinida. Ela troca no próximo acesso.' : (r.erro || 'Falha ao redefinir.'));
+      });
+      tdR.appendChild(reset);
+    }
     tr.appendChild(tdR);
     return tr;
   },
@@ -104,10 +121,15 @@ const Painel = {
       const i = this.el('input'); if (p[0] === 'senha') i.type = 'password';
       l.appendChild(i); f.appendChild(l); campos[p[0]] = i;
     });
+
+    // Só o admin escolhe o perfil; a gerente cria apenas usuárias
     const lp = this.el('label', '', 'Perfil');
     const sel = this.el('select');
-    ['usuario', 'gerente', 'admin'].forEach((v) => { const o = this.el('option', '', v); o.value = v; sel.appendChild(o); });
-    lp.appendChild(sel); f.appendChild(lp);
+    const perfis = this.ehAdmin() ? ['usuario', 'gerente', 'admin'] : ['usuario'];
+    perfis.forEach((v) => { const o = this.el('option', '', v); o.value = v; sel.appendChild(o); });
+    lp.appendChild(sel);
+    if (perfis.length > 1) f.appendChild(lp);
+
     const b = this.el('button', 'pn-btn', 'Criar usuário'); b.type = 'submit';
     f.appendChild(b);
     f.addEventListener('submit', async (ev) => {
