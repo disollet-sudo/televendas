@@ -1,11 +1,41 @@
 // Controle de telas e eventos. Cada etapa nova adiciona seu próprio módulo.
 const App = {
   perfil: null,
+  aba: 'kanban',
 
   mostrar(nome) {
     ['login', 'trocar', 'app'].forEach(function (t) {
       document.getElementById('tela-' + t).hidden = (t !== nome);
     });
+  },
+
+  // Abas Kanban | Painel (Painel só para gerente/admin)
+  montarAbas() {
+    let nav = document.getElementById('abas');
+    if (nav) nav.remove();
+    if (!Kanban.ehGestor()) return;
+    nav = document.createElement('nav');
+    nav.id = 'abas';
+    nav.className = 'abas';
+    [['kanban', 'Kanban'], ['painel', 'Painel']].forEach((p) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = p[1];
+      b.dataset.aba = p[0];
+      b.className = 'aba' + (p[0] === this.aba ? ' ativa' : '');
+      b.addEventListener('click', () => this.trocarAba(p[0]));
+      nav.appendChild(b);
+    });
+    const conteudo = document.getElementById('conteudo');
+    conteudo.parentNode.insertBefore(nav, conteudo);
+  },
+
+  trocarAba(aba) {
+    this.aba = aba;
+    document.querySelectorAll('#abas .aba').forEach(function (b) {
+      b.classList.toggle('ativa', b.dataset.aba === aba);
+    });
+    if (aba === 'painel') Painel.iniciar(); else Kanban.iniciar();
   },
 
   async entrar() {
@@ -14,7 +44,9 @@ const App = {
     const nome = this.perfil.usuario || this.perfil.login || '';
     document.getElementById('topo-usuario').textContent = nome + ' (' + (this.perfil.acesso || '') + ')';
     this.mostrar('app');
+    this.aba = 'kanban';
     Kanban.resetar();
+    this.montarAbas();
     Kanban.iniciar();
   },
 
