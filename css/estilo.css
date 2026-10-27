@@ -48,3 +48,7 @@ main { padding: 16px; }
 .kb-salvar { margin-top: 6px; padding: 5px 12px; font-size: .85rem; }
 .kb-aviso { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #991b1b;
   color: #fff; padding: 10px 16px; border-radius: 8px; z-index: 10; }
+
+.kb-usuario { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; }
+.kb-total { align-self: center; color: #475569; font-size: .9rem; }
+.kb-aviso-topo { margin: 0 0 10px; color: #92400e; background: #fef3c7; padding: 8px 12px; border-radius: 6px; }
