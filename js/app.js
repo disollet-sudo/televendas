@@ -9,15 +9,19 @@ const App = {
     });
   },
 
-  // Abas Kanban | Painel (Painel só para gerente/admin)
+  ehAdmin() { return String((this.perfil && this.perfil.acesso) || '').toUpperCase() === 'ADMIN'; },
+
+  // Gerente e admin: Visão geral | Usuários | (Atividade, só admin). Usuária: só o kanban.
   montarAbas() {
     let nav = document.getElementById('abas');
     if (nav) nav.remove();
     if (!Kanban.ehGestor()) return;
+    const abas = [['visao', 'Visão geral'], ['usuarios', 'Usuários']];
+    if (this.ehAdmin()) abas.push(['atividade', 'Atividade']);
     nav = document.createElement('nav');
     nav.id = 'abas';
     nav.className = 'abas';
-    [['kanban', 'Kanban'], ['painel', 'Painel']].forEach((p) => {
+    abas.forEach((p) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = p[1];
@@ -32,10 +36,14 @@ const App = {
 
   trocarAba(aba) {
     this.aba = aba;
+    Atividade.parar();
     document.querySelectorAll('#abas .aba').forEach(function (b) {
       b.classList.toggle('ativa', b.dataset.aba === aba);
     });
-    if (aba === 'painel') Painel.iniciar(); else Kanban.iniciar();
+    if (aba === 'visao') Visao.iniciar();
+    else if (aba === 'usuarios') Painel.iniciar();
+    else if (aba === 'atividade') Atividade.iniciar();
+    else Kanban.iniciar();
   },
 
   async entrar() {
@@ -44,10 +52,11 @@ const App = {
     const nome = this.perfil.usuario || this.perfil.login || '';
     document.getElementById('topo-usuario').textContent = nome + ' (' + (this.perfil.acesso || '') + ')';
     this.mostrar('app');
-    this.aba = 'kanban';
     Kanban.resetar();
+    this.aba = Kanban.ehGestor() ? 'visao' : 'kanban';
     this.montarAbas();
-    Kanban.iniciar();
+    this.trocarAba(this.aba);
+    Presenca.iniciar();
   },
 
   iniciar() {
@@ -82,6 +91,8 @@ const App = {
     });
 
     document.getElementById('btn-sair').addEventListener('click', async () => {
+      Atividade.parar();
+      await Presenca.parar();
       await Auth.sair();
       this.mostrar('login');
     });
