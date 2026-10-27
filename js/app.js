@@ -14,6 +14,7 @@ const App = {
     const nome = this.perfil.usuario || this.perfil.login || '';
     document.getElementById('topo-usuario').textContent = nome + ' (' + (this.perfil.acesso || '') + ')';
     this.mostrar('app');
+    Kanban.resetar();
     Kanban.iniciar();
   },
 
