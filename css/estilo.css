@@ -52,3 +52,18 @@ main { padding: 16px; }
 .kb-usuario { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; }
 .kb-total { align-self: center; color: #475569; font-size: .9rem; }
 .kb-aviso-topo { margin: 0 0 10px; color: #92400e; background: #fef3c7; padding: 8px 12px; border-radius: 6px; }
+
+/* ---------- Abas e Painel (cole no fim do estilo.css) ---------- */
+.abas { display: flex; gap: 4px; margin-bottom: 12px; }
+.aba { padding: 8px 16px; background: #e5e7eb; color: #334155; }
+.aba.ativa { background: #2563eb; color: #fff; }
+.pn-cobertura { margin: 0 0 10px; color: #92400e; background: #fef3c7; padding: 8px 12px; border-radius: 6px; }
+.pn-rolagem { overflow-x: auto; }
+.pn-tabela { border-collapse: collapse; width: 100%; background: #fff; border-radius: 8px; font-size: .9rem; }
+.pn-tabela th, .pn-tabela td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+.pn-estados { width: 150px; margin-right: 6px; padding: 6px; }
+.pn-btn { padding: 6px 12px; font-size: .85rem; }
+.pn-sec { background: #64748b; }
+.pn-novo { margin-top: 16px; background: #fff; padding: 14px; border-radius: 8px; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; align-items: end; }
+.pn-novo h3 { grid-column: 1 / -1; margin: 0; font-size: 1rem; }
