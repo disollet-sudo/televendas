@@ -1,0 +1,18 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, Arial, sans-serif; background: #f3f4f6; color: #1f2937; }
+[hidden] { display: none !important; }
+.centro { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.cartao { background: #fff; padding: 28px; border-radius: 10px; width: min(360px, 92vw);
+  box-shadow: 0 2px 12px rgba(0,0,0,.1); display: flex; flex-direction: column; gap: 12px; }
+.cartao h1 { margin: 0 0 4px; font-size: 1.3rem; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: .9rem; }
+input { padding: 9px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 1rem; }
+button { padding: 10px; border: 0; border-radius: 6px; background: #2563eb; color: #fff;
+  font-size: 1rem; cursor: pointer; }
+button:disabled { opacity: .6; cursor: wait; }
+.erro { color: #b91c1c; margin: 0; min-height: 1.2em; font-size: .9rem; }
+.topo { display: flex; align-items: center; gap: 16px; padding: 10px 16px; background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.topo span { margin-left: auto; font-size: .9rem; }
+.topo button { padding: 6px 12px; background: #64748b; }
+main { padding: 16px; }
