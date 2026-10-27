@@ -132,6 +132,16 @@ const Kanban = {
       c.qtdPedidos + (Number(c.qtdPedidos) === 1 ? ' pedido' : ' pedidos')));
     if (c.usuario) box.appendChild(this.el('div', 'kb-linha kb-dono', 'Atendido por: ' + c.usuario));
 
+    // seletor de status (criado antes para o botão WhatsApp poder usá-lo)
+    const sel = this.el('select', 'kb-status');
+    this.dados.ordem.forEach((s) => {
+      const o = this.el('option', '', this.ROTULOS[s] || s);
+      o.value = s;
+      if (s === c.status) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', () => this.mover(c, sel.value, sel));
+
     // contato
     const tel = this.digitos(c.telefone);
     const acoes = this.el('div', 'kb-acoes');
@@ -145,20 +155,16 @@ const Kanban = {
       wa.href = 'https://wa.me/' + (tel.indexOf('55') === 0 && tel.length >= 12 ? tel : '55' + tel);
       wa.target = '_blank';
       wa.rel = 'noopener';
+      // ao clicar no WhatsApp, quem está em "A chamar" passa para "Em contato"
+      wa.addEventListener('click', () => {
+        if (c.status === 'A_CHAMAR') this.mover(c, 'EM_CONTATO', sel);
+      });
       acoes.appendChild(wa);
     }
     if (c.telefone) acoes.appendChild(this.el('span', 'kb-tel', c.telefone));
     box.appendChild(acoes);
 
     // mover
-    const sel = this.el('select', 'kb-status');
-    this.dados.ordem.forEach((s) => {
-      const o = this.el('option', '', this.ROTULOS[s] || s);
-      o.value = s;
-      if (s === c.status) o.selected = true;
-      sel.appendChild(o);
-    });
-    sel.addEventListener('change', () => this.mover(c, sel.value, sel));
     box.appendChild(sel);
 
     // observação
@@ -191,7 +197,8 @@ const Kanban = {
     c.status = novo;
     if (!this.dados.colunas[novo]) this.dados.colunas[novo] = [];
     this.dados.colunas[novo].push(c);
-    this.dados.colunas[novo].sort(function (a, b) { return b.dias - a.dias; });
+    // mesma ordem da lista original: menos dias primeiro (93, 94, 95...)
+    this.dados.colunas[novo].sort(function (a, b) { return a.dias - b.dias; });
     this.desenharColunas();
   },
 
