@@ -1,4 +1,4 @@
 // Única coisa a editar: a URL do Web App (termina em /exec).
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbwdIiqgMG1-p3pi4JHmdzy_W4k8pFGVnJTxIuZSMlOQo-sRiOUltNIVAvScl6ySHItF/exec'
+  API_URL: 'https://script.google.com/macros/s/AKfycbyznKLaP6VGJqG_RhxOXEOx3YdegCneK5gvVBS7zcO3mBrJZQyy3p9pic1sXyVqhmko/exec'
 };
