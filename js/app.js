@@ -11,13 +11,18 @@ const App = {
 
   ehAdmin() { return String((this.perfil && this.perfil.acesso) || '').toUpperCase() === 'ADMIN'; },
 
-  // Gerente e admin: Visão geral | Usuários | (Atividade, só admin). Usuária: só o kanban.
+  // Usuária: Kanban | Agenda.
+  // Gerente e admin: Visão geral | Usuários | Agenda | (Atividade, só admin).
   montarAbas() {
     let nav = document.getElementById('abas');
     if (nav) nav.remove();
-    if (!Kanban.ehGestor()) return;
-    const abas = [['visao', 'Visão geral'], ['usuarios', 'Usuários']];
-    if (this.ehAdmin()) abas.push(['atividade', 'Atividade']);
+    let abas;
+    if (Kanban.ehGestor()) {
+      abas = [['visao', 'Visão geral'], ['usuarios', 'Usuários'], ['agenda', 'Agenda']];
+      if (this.ehAdmin()) abas.push(['atividade', 'Atividade']);
+    } else {
+      abas = [['kanban', 'Kanban'], ['agenda', 'Agenda']];
+    }
     nav = document.createElement('nav');
     nav.id = 'abas';
     nav.className = 'abas';
@@ -37,12 +42,14 @@ const App = {
   trocarAba(aba) {
     this.aba = aba;
     Atividade.parar();
+    Kanban.fecharDetalhe();
     document.querySelectorAll('#abas .aba').forEach(function (b) {
       b.classList.toggle('ativa', b.dataset.aba === aba);
     });
     if (aba === 'visao') Visao.iniciar();
     else if (aba === 'usuarios') Painel.iniciar();
     else if (aba === 'atividade') Atividade.iniciar();
+    else if (aba === 'agenda') Agenda.iniciar();
     else Kanban.iniciar();
   },
 
@@ -53,6 +60,8 @@ const App = {
     document.getElementById('topo-usuario').textContent = nome + ' (' + (this.perfil.acesso || '') + ')';
     this.mostrar('app');
     Kanban.resetar();
+    Agenda.mes = null;
+    Agenda.dia = null;
     this.aba = Kanban.ehGestor() ? 'visao' : 'kanban';
     this.montarAbas();
     this.trocarAba(this.aba);
