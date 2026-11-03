@@ -85,7 +85,7 @@ const Visao = {
     b.appendChild(this.el('strong', 'kb-razao', c.razao));
     if (c.fantasia) b.appendChild(this.el('div', 'kb-fantasia', c.fantasia));
     b.appendChild(this.el('div', 'kb-linha', (c.municipio || '') + ' - ' + (c.uf || '')));
-    b.appendChild(this.el('div', 'kb-linha', 'Último embarque: ' + Kanban.dataBr(c.ultimaData) + ' (' + c.dias + ' dias)'));
+    b.appendChild(this.el('div', 'kb-linha', Kanban.textoEntrega(c)));
     if (c.telefone) b.appendChild(this.el('div', 'kb-linha', 'Tel: ' + c.telefone));
     if (c.obs) b.appendChild(this.el('div', 'vs-obs', 'Obs: ' + c.obs));
     return b;
