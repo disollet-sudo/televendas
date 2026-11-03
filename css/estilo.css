@@ -54,11 +54,39 @@ main { padding: 16px; }
   font: inherit; resize: vertical; }
 .kb-salvar { margin-top: 6px; padding: 5px 12px; font-size: .85rem; }
 .kb-aviso { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #991b1b;
-  color: #fff; padding: 10px 16px; border-radius: 8px; z-index: 10; }
+  color: #fff; padding: 10px 16px; border-radius: 8px; z-index: 2000; }
 
 .kb-usuario { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; }
 .kb-total { align-self: center; color: #475569; font-size: .9rem; }
 .kb-aviso-topo { margin: 0 0 10px; color: #92400e; background: #fef3c7; padding: 8px 12px; border-radius: 6px; }
+
+/* ---------- Observações e retornos agendados ---------- */
+.kb-agenda { color: #1d4ed8; font-weight: 600; }
+.kb-atrasado { color: #b91c1c; }
+.kb-card.kb-atrasado { border-left: 4px solid #dc2626; }
+.kb-ultima-obs { font-size: 12px; color: #555; margin: 4px 0; white-space: pre-wrap; }
+.kb-form-agenda { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.kb-form-agenda input { flex: 1 1 120px; min-width: 0; padding: 6px; font-size: .9rem; }
+.kb-form-agenda .kb-salvar { margin-top: 0; }
+.kb-nota { border-bottom: 1px solid #e5e5e5; padding: 6px 0; white-space: pre-wrap; }
+.kb-nota small { color: #777; display: block; }
+
+/* ---------- Calendário (Agenda) ---------- */
+.ag-topo { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 8px; }
+.ag-titulo { min-width: 180px; text-align: center; text-transform: capitalize; }
+.ag-nav { font-size: 20px; padding: 2px 12px; cursor: pointer; }
+.ag-grade { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; max-width: 640px; margin: 0 auto; }
+.ag-sem { text-align: center; font-size: 12px; color: #777; }
+.ag-dia { position: relative; min-height: 56px; border: 1px solid #ddd; border-radius: 6px; background: #fff;
+  color: #1f2937; cursor: pointer; text-align: left; padding: 4px 6px; }
+.ag-dia.ag-hoje { border-color: #2563eb; }
+.ag-dia.ag-sel { background: #eff6ff; }
+.ag-n { font-size: 13px; }
+.ag-qtd { position: absolute; right: 4px; bottom: 4px; background: #2563eb; color: #fff; border-radius: 10px;
+  font-size: 11px; padding: 1px 7px; }
+.ag-qtd.ag-atras { background: #dc2626; }
+.ag-lista { max-width: 640px; margin: 14px auto 0; display: flex; flex-direction: column; gap: 8px; }
+.ag-lista h3 { margin: 0; font-size: 1rem; }
 
 /* ---------- Abas e Painel de usuários ---------- */
 .abas { display: flex; gap: 4px; margin-bottom: 12px; }
