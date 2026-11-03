@@ -1,5 +1,5 @@
-// Tela do kanban: colunas, cards, popup do cliente, mover entre colunas e observação.
-// Usa as ações 'kanban', 'atualizarCard' e 'historico' da API.
+// Tela do kanban: colunas, cards, popup do cliente, mover entre colunas, observações e agendamento de retorno.
+// Usa as ações 'kanban', 'atualizarCard', 'historico', 'notas', 'adicionarNota', 'agendar' e 'concluirAgenda' da API.
 const Kanban = {
   ROTULOS: {
     A_CHAMAR: 'A chamar',
@@ -32,6 +32,11 @@ const Kanban = {
   dataBr(iso) {
     const p = String(iso || '').split('-');
     return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : String(iso || '');
+  },
+
+  hojeIso() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   },
 
   digitos(tel) { return String(tel || '').replace(/\D/g, ''); },
@@ -157,12 +162,17 @@ const Kanban = {
   },
 
   card(c) {
-    const box = this.el('div', 'kb-card');
+    const box = this.el('div', 'kb-card' + (c.atrasado ? ' kb-atrasado' : ''));
     box.style.cursor = 'pointer';
     box.appendChild(this.el('strong', 'kb-razao', c.razao));
     if (c.fantasia) box.appendChild(this.el('div', 'kb-fantasia', c.fantasia));
     box.appendChild(this.el('div', 'kb-linha', (c.municipio || '') + ' - ' + (c.uf || '')));
     box.appendChild(this.el('div', 'kb-linha', this.textoEntrega(c)));
+    if (c.agendaData) {
+      box.appendChild(this.el('div', 'kb-linha kb-agenda' + (c.atrasado ? ' kb-atrasado' : ''),
+        (c.atrasado ? 'Retorno atrasado: ' : 'Retorno agendado: ') + this.dataBr(c.agendaData) +
+        (c.agendaNota ? ' · ' + c.agendaNota : '')));
+    }
     if (c.usuario) box.appendChild(this.el('div', 'kb-linha kb-dono', 'Atendido por: ' + c.usuario));
 
     // seletor de status (criado antes para o botão WhatsApp poder usá-lo)
@@ -181,6 +191,7 @@ const Kanban = {
     if (tel.length >= 8) {
       const ligar = this.el('a', 'kb-link', 'Ligar');
       ligar.href = 'tel:' + tel;
+      ligar.addEventListener('click', () => this.chamou(c));
       acoes.appendChild(ligar);
     }
     if (tel.length >= 10) {
@@ -188,9 +199,11 @@ const Kanban = {
       wa.href = 'https://wa.me/' + (tel.indexOf('55') === 0 && tel.length >= 12 ? tel : '55' + tel);
       wa.target = '_blank';
       wa.rel = 'noopener';
-      // ao clicar no WhatsApp, quem está em "A chamar" passa para "Em contato"
+      // ao clicar no WhatsApp, quem está em "A chamar" passa para "Em contato";
+      // nos demais casos, um retorno vencido é considerado atendido
       wa.addEventListener('click', () => {
         if (c.status === 'A_CHAMAR') this.mover(c, 'EM_CONTATO', sel);
+        else this.chamou(c);
       });
       acoes.appendChild(wa);
     }
@@ -200,25 +213,101 @@ const Kanban = {
     // mover
     box.appendChild(sel);
 
-    // observação
+    // observações (histórico) e agendamento
     const det = this.el('details', 'kb-obs');
-    det.open = !!c.obs;
     det.appendChild(this.el('summary', '', c.obs ? 'Observação ✎' : 'Observação'));
-    const txt = this.el('textarea', 'kb-texto');
-    txt.rows = 3;
-    txt.value = c.obs || '';
-    const salvar = this.el('button', 'kb-salvar', 'Salvar');
-    salvar.type = 'button';
-    salvar.addEventListener('click', () => this.salvarObs(c, txt.value, salvar));
-    det.append(txt, salvar);
+    if (c.obs) det.appendChild(this.el('div', 'kb-ultima-obs', 'Última: ' + c.obs));
+    det.appendChild(this.formNota(c, null));
     box.appendChild(det);
 
-    // clicar no card abre o popup (menos nos botões, links, seletor e observação)
+    const ag = this.el('details', 'kb-obs');
+    ag.appendChild(this.el('summary', '', 'Agendar retorno'));
+    ag.appendChild(this.formAgenda(c));
+    box.appendChild(ag);
+
+    // clicar no card abre o popup (menos nos botões, links, seletor, campos e detalhes)
     box.addEventListener('click', (e) => {
-      if (e.target.closest('a, button, select, textarea, details')) return;
+      if (e.target.closest('a, button, select, textarea, input, details')) return;
       this.abrirDetalhe(c);
     });
     return box;
+  },
+
+  // ---------- observações e agenda ----------
+
+  // observação nova: adiciona ao histórico, nunca sobrescreve
+  formNota(c, aoAdicionar) {
+    const f = this.el('div', 'kb-form-nota');
+    const txt = this.el('textarea', 'kb-texto');
+    txt.rows = 3;
+    txt.placeholder = 'Nova observação (as anteriores ficam guardadas)';
+    const btn = this.el('button', 'kb-salvar', 'Adicionar');
+    btn.type = 'button';
+    btn.addEventListener('click', async () => {
+      const texto = txt.value.trim();
+      if (!texto) return;
+      btn.disabled = true;
+      const r = await Api.chamar('adicionarNota', { cnpj: c.cnpj, texto: texto });
+      btn.disabled = false;
+      if (!r.ok) { this.aviso(r.erro || 'Não foi possível salvar a observação.'); return; }
+      c.obs = texto;
+      txt.value = '';
+      btn.textContent = 'Salvo ✓';
+      setTimeout(function () { btn.textContent = 'Adicionar'; }, 1500);
+      if (aoAdicionar) aoAdicionar(r.nota);
+    });
+    f.append(txt, btn);
+    return f;
+  },
+
+  formAgenda(c) {
+    const f = this.el('div', 'kb-form-agenda');
+    const data = this.el('input', 'kb-data');
+    data.type = 'date';
+    data.min = this.hojeIso();
+    if (c.agendaData && c.agendaData >= data.min) data.value = c.agendaData;
+    const nota = this.el('input', 'kb-nota-agenda');
+    nota.placeholder = 'Motivo (opcional)';
+    nota.maxLength = 200;
+    const btn = this.el('button', 'kb-salvar', 'Agendar');
+    btn.type = 'button';
+    btn.addEventListener('click', async () => {
+      if (!data.value) { this.aviso('Escolha a data do retorno.'); return; }
+      btn.disabled = true;
+      const r = await Api.chamar('agendar', { cnpj: c.cnpj, data: data.value, nota: nota.value });
+      btn.disabled = false;
+      if (!r.ok) { this.aviso(r.erro || 'Não foi possível agendar.'); return; }
+      this.aviso('Retorno agendado para ' + this.dataBr(data.value));
+      this.fecharDetalhe();
+      this.iniciar(); // o card pode mudar de coluna
+    });
+    f.append(data, nota, btn);
+    return f;
+  },
+
+  // clicou em Ligar/WhatsApp: considera o retorno vencido como atendido
+  async chamou(c) {
+    if (!c.agendaData || c.agendaData > this.hojeIso()) return;
+    const r = await Api.chamar('concluirAgenda', { cnpj: c.cnpj });
+    if (r.ok) this.iniciar();
+  },
+
+  async carregarNotas(c, lista) {
+    let r;
+    try { r = await Api.chamar('notas', { cnpj: c.cnpj }); } catch (e) { r = { ok: false }; }
+    if (!lista.isConnected) return;
+    lista.replaceChildren();
+    if (!r || !r.ok) { lista.textContent = (r && r.erro) || 'Não foi possível carregar as observações.'; return; }
+    if (!r.notas.length) { lista.textContent = 'Nenhuma observação ainda.'; return; }
+    r.notas.forEach((n) => this.notaNaLista(lista, n, false));
+  },
+
+  notaNaLista(lista, n, topo) {
+    if (!lista.querySelector('.kb-nota')) lista.replaceChildren();
+    const d = this.el('div', 'kb-nota');
+    d.appendChild(this.el('small', '', (n.quando ? n.quando + ' · ' : '') + (n.usuario || '')));
+    d.appendChild(this.el('div', '', n.texto));
+    if (topo) lista.prepend(d); else lista.appendChild(d);
   },
 
   // ---------- popup do cliente ----------
@@ -282,11 +371,19 @@ const Kanban = {
     campo('Última entrega', c.ultimaData ? this.dataBr(c.ultimaData) + ' (' + c.dias + ' dias)' : 'Sem pedido registrado');
     campo('Situação no kanban', this.ROTULOS[c.status] || c.status);
     if (c.usuario) campo('Atendido por', c.usuario);
-    caixa.appendChild(dados);
-    if (c.obs) {
-      caixa.appendChild(this.el('h4', '', 'Observação'));
-      caixa.appendChild(this.el('p', '', c.obs));
+    if (c.agendaData) {
+      campo('Retorno', this.dataBr(c.agendaData) + (c.atrasado ? ' (atrasado)' : '') + (c.agendaNota ? ' · ' + c.agendaNota : ''));
     }
+    caixa.appendChild(dados);
+
+    caixa.appendChild(this.el('h4', '', 'Agendar retorno'));
+    caixa.appendChild(this.formAgenda(c));
+
+    caixa.appendChild(this.el('h4', '', 'Observações'));
+    const listaNotas = this.el('div', 'kb-notas', 'Carregando...');
+    caixa.appendChild(this.formNota(c, (n) => this.notaNaLista(listaNotas, n, true)));
+    caixa.appendChild(listaNotas);
+    this.carregarNotas(c, listaNotas);
 
     const titulo = this.el('h4', '', 'Histórico de pedidos');
     const area = this.el('div', '', 'Carregando pedidos...');
@@ -348,24 +445,7 @@ const Kanban = {
       this.desenharColunas();
       return;
     }
-    const origem = this.dados.colunas[c.status] || [];
-    const i = origem.indexOf(c);
-    if (i >= 0) origem.splice(i, 1);
-    c.status = novo;
-    if (!this.dados.colunas[novo]) this.dados.colunas[novo] = [];
-    this.dados.colunas[novo].push(c);
-    // mesma ordem da lista original: menos dias primeiro; sem pedido por último
-    this.dados.colunas[novo].sort(this.porDias);
-    this.desenharColunas();
-  },
-
-  async salvarObs(c, texto, btn) {
-    btn.disabled = true;
-    const r = await Api.chamar('atualizarCard', { cnpj: c.cnpj, status: c.status, obs: texto });
-    btn.disabled = false;
-    if (!r.ok) { this.aviso(r.erro || 'Não foi possível salvar a observação.'); return; }
-    c.obs = texto;
-    btn.textContent = 'Salvo ✓';
-    setTimeout(function () { btn.textContent = 'Salvar'; }, 1500);
+    // recarrega: mover pode encerrar/fechar retornos e mudar a coluna real do card
+    this.iniciar();
   }
 };
