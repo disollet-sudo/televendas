@@ -2,8 +2,18 @@
 // Usa as ações 'kanban', 'atualizarCard' e 'historico' da API.
 const Kanban = {
   ROTULOS: {
-    A_CHAMAR: 'A chamar', EM_CONTATO: 'Em contato', RETORNAR: 'Retornar',
-    PEDIDO_FEITO: 'Pedido feito', SEM_INTERESSE: 'Sem interesse'
+    A_CHAMAR: 'A chamar',
+    EM_CONTATO: 'Em contato',
+    RETORNAR: 'Retornar',
+    NEGOCIACAO: 'Negociação',
+    AGUARDANDO_CONFIRMACAO: 'Aguardando confirmação',
+    PEDIDO_CREDITO: 'Pedido crédito',
+    PEDIDO_FEITO: 'Pedido feito',
+    NAO_COMPRA_TELE: 'Não compra com Tele',
+    INAPTA: 'Inapta',
+    TELEFONE_ERRADO: 'Telefone errado',
+    ATRASADOS: 'Atrasados',
+    SEM_INTERESSE: 'Sem interesse'
   },
   dados: null,
   filtro: '',
@@ -219,7 +229,7 @@ const Kanban = {
     s.textContent =
       '.kb-modal-fundo{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000;padding:12px}' +
       '.kb-modal{background:#fff;border-radius:10px;max-width:820px;width:100%;max-height:90vh;overflow:auto;padding:18px 20px;box-shadow:0 10px 30px rgba(0,0,0,.3);position:relative}' +
-      '.kb-modal-fechar{position:absolute;top:8px;right:12px;border:0;background:none;font-size:26px;cursor:pointer;line-height:1}' +
+      '.kb-modal-fechar{position:absolute;top:8px;right:12px;border:0;background:none;font-size:26px;cursor:pointer;line-height:1;color:#1f2937}' +
       '.kb-modal h3{margin:0 28px 2px 0;font-size:18px}' +
       '.kb-modal-sub{color:#555;margin:0 0 12px}' +
       '.kb-modal-dados{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 16px;margin-bottom:14px}' +
