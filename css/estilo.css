@@ -29,7 +29,14 @@ main { padding: 16px; }
 .kb-A_CHAMAR .kb-titulo { color: #1d4ed8; }
 .kb-EM_CONTATO .kb-titulo { color: #b45309; }
 .kb-RETORNAR .kb-titulo { color: #7c3aed; }
+.kb-NEGOCIACAO .kb-titulo { color: #0e7490; }
+.kb-AGUARDANDO_CONFIRMACAO .kb-titulo { color: #a16207; }
+.kb-PEDIDO_CREDITO .kb-titulo { color: #0f766e; }
 .kb-PEDIDO_FEITO .kb-titulo { color: #15803d; }
+.kb-NAO_COMPRA_TELE .kb-titulo { color: #475569; }
+.kb-INAPTA .kb-titulo { color: #b91c1c; }
+.kb-TELEFONE_ERRADO .kb-titulo { color: #be185d; }
+.kb-ATRASADOS .kb-titulo { color: #c2410c; }
 .kb-SEM_INTERESSE .kb-titulo { color: #6b7280; }
 .kb-card { background: #fff; border-radius: 8px; padding: 10px; display: flex; flex-direction: column;
   gap: 5px; box-shadow: 0 1px 3px rgba(0,0,0,.12); font-size: .85rem; }
@@ -82,7 +89,14 @@ main { padding: 16px; }
 .vs-A_CHAMAR .vs-num { color: #1d4ed8; }
 .vs-EM_CONTATO .vs-num { color: #b45309; }
 .vs-RETORNAR .vs-num { color: #7c3aed; }
+.vs-NEGOCIACAO .vs-num { color: #0e7490; }
+.vs-AGUARDANDO_CONFIRMACAO .vs-num { color: #a16207; }
+.vs-PEDIDO_CREDITO .vs-num { color: #0f766e; }
 .vs-PEDIDO_FEITO .vs-num { color: #15803d; }
+.vs-NAO_COMPRA_TELE .vs-num { color: #475569; }
+.vs-INAPTA .vs-num { color: #b91c1c; }
+.vs-TELEFONE_ERRADO .vs-num { color: #be185d; }
+.vs-ATRASADOS .vs-num { color: #c2410c; }
 .vs-SEM_INTERESSE .vs-num { color: #6b7280; }
 .vs-clicavel { cursor: pointer; }
 .vs-clicavel:hover { background: #eff6ff; }
