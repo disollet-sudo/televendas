@@ -1,6 +1,7 @@
 // Tela do kanban: colunas, cards, popup do cliente, mover entre colunas, observações e agendamento de retorno.
 // Usa as ações 'kanban', 'atualizarCard', 'historico', 'notas', 'adicionarNota', 'agendar' e 'concluirAgenda' da API.
 // Filtros: botões de estado (UF) e "Minha base" (cards com baseMeninas = true).
+// O estilo dos filtros e do pop-up de carregamento fica no css/estilo.css.
 const Kanban = {
   ROTULOS: {
     A_CHAMAR: 'A chamar',
@@ -25,6 +26,7 @@ const Kanban = {
   minhaBase: false, // mostra só clientes da base das meninas
   elTotal: null,
   elFiltros: null,
+  _carN: 0,        // quantas ações com pop-up de carregamento estão rodando
 
   // ---------- utilitários ----------
   el(tag, classe, texto) {
@@ -45,6 +47,12 @@ const Kanban = {
   },
 
   digitos(tel) { return String(tel || '').replace(/\D/g, ''); },
+
+  // número para o botão Ligar: sempre com 00 na frente (sem duplicar)
+  telLigar(tel) {
+    const d = this.digitos(tel);
+    return d.indexOf('00') === 0 ? d : '00' + d;
+  },
 
   cnpjBr(v) {
     const d = this.digitos(v);
@@ -79,6 +87,43 @@ const Kanban = {
     this._t = setTimeout(function () { a.hidden = true; }, 4000);
   },
 
+  // ---------- pop-up de carregamento ----------
+  mostrarCarregando(msg) {
+    this._carN++;
+    let f = document.getElementById('kb-carregando');
+    if (!f) {
+      f = this.el('div', 'car-fundo');
+      f.id = 'kb-carregando';
+      const caixa = this.el('div', 'car-caixa');
+      caixa.appendChild(this.el('div', 'car-roda'));
+      const t = this.el('span', '');
+      t.id = 'kb-carregando-txt';
+      caixa.appendChild(t);
+      f.appendChild(caixa);
+      document.body.appendChild(f);
+    }
+    document.getElementById('kb-carregando-txt').textContent = msg || 'Carregando...';
+    f.hidden = false;
+  },
+
+  esconderCarregando() {
+    this._carN = Math.max(0, this._carN - 1);
+    if (this._carN === 0) {
+      const f = document.getElementById('kb-carregando');
+      if (f) f.hidden = true;
+    }
+  },
+
+  // chama a API mostrando o pop-up enquanto espera
+  async chamar(msg, acao, dados) {
+    this.mostrarCarregando(msg);
+    try {
+      return await Api.chamar(acao, dados || {});
+    } finally {
+      this.esconderCarregando();
+    }
+  },
+
   // ---------- carregar ----------
   ehGestor() {
     const a = String((App.perfil && App.perfil.acesso) || '').toUpperCase();
@@ -100,32 +145,23 @@ const Kanban = {
 
   async iniciar() {
     const area = document.getElementById('conteudo');
-    area.textContent = 'Carregando...';
-    if (this.ehGestor() && this.usuarios === null) await this.carregarUsuarios();
-    const r = await Api.chamar('kanban', this.alvo ? { verUsuario: this.alvo } : {});
-    if (!r.ok) {
-      this.alvo = '';
-      area.textContent = r.erro || 'Não foi possível carregar o kanban.';
-      return;
+    this.mostrarCarregando('Carregando clientes...');
+    try {
+      if (this.ehGestor() && this.usuarios === null) await this.carregarUsuarios();
+      const r = await Api.chamar('kanban', this.alvo ? { verUsuario: this.alvo } : {});
+      if (!r.ok) {
+        this.alvo = '';
+        area.textContent = r.erro || 'Não foi possível carregar o kanban.';
+        return;
+      }
+      this.dados = r;
+      this.desenhar();
+    } finally {
+      this.esconderCarregando();
     }
-    this.dados = r;
-    this.desenhar();
   },
 
   // ---------- filtros (estado e minha base) ----------
-  estiloFiltros() {
-    if (document.getElementById('kb-filtros-css')) return;
-    const s = document.createElement('style');
-    s.id = 'kb-filtros-css';
-    s.textContent =
-      '.kb-filtros{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 10px}' +
-      '.kb-filtros .kb-rotulo{color:#555;font-size:13px;margin-right:2px}' +
-      '.kb-filtros button{border:1px solid #cbd5e1;background:#fff;border-radius:14px;padding:3px 11px;cursor:pointer;font-size:13px}' +
-      '.kb-filtros button.ativo{background:#1f2937;color:#fff;border-color:#1f2937}' +
-      '.kb-filtros .kb-minha{font-weight:600}';
-    document.head.appendChild(s);
-  },
-
   todosCards() {
     const out = [];
     const cols = (this.dados && this.dados.colunas) || {};
@@ -145,7 +181,6 @@ const Kanban = {
   },
 
   desenharFiltros() {
-    this.estiloFiltros();
     const box = this.elFiltros;
     box.replaceChildren();
     const ufs = this.estadosDoQuadro();
@@ -288,7 +323,7 @@ const Kanban = {
     const acoes = this.el('div', 'kb-acoes');
     if (tel.length >= 8) {
       const ligar = this.el('a', 'kb-link', 'Ligar');
-      ligar.href = 'tel:' + tel;
+      ligar.href = 'tel:' + this.telLigar(c.telefone); // sempre com 00 na frente
       ligar.addEventListener('click', () => this.chamou(c));
       acoes.appendChild(ligar);
     }
@@ -345,7 +380,12 @@ const Kanban = {
       const texto = txt.value.trim();
       if (!texto) return;
       btn.disabled = true;
-      const r = await Api.chamar('adicionarNota', { cnpj: c.cnpj, texto: texto });
+      let r;
+      try {
+        r = await this.chamar('Salvando observação...', 'adicionarNota', { cnpj: c.cnpj, texto: texto });
+      } catch (e) {
+        r = { ok: false, erro: 'Falha de conexão.' };
+      }
       btn.disabled = false;
       if (!r.ok) { this.aviso(r.erro || 'Não foi possível salvar a observação.'); return; }
       c.obs = texto;
@@ -372,7 +412,12 @@ const Kanban = {
     btn.addEventListener('click', async () => {
       if (!data.value) { this.aviso('Escolha a data do retorno.'); return; }
       btn.disabled = true;
-      const r = await Api.chamar('agendar', { cnpj: c.cnpj, data: data.value, nota: nota.value });
+      let r;
+      try {
+        r = await this.chamar('Agendando retorno...', 'agendar', { cnpj: c.cnpj, data: data.value, nota: nota.value });
+      } catch (e) {
+        r = { ok: false, erro: 'Falha de conexão.' };
+      }
       btn.disabled = false;
       if (!r.ok) { this.aviso(r.erro || 'Não foi possível agendar.'); return; }
       this.aviso('Retorno agendado para ' + this.dataBr(data.value));
@@ -386,7 +431,8 @@ const Kanban = {
   // clicou em Ligar/WhatsApp: considera o retorno vencido como atendido
   async chamou(c) {
     if (!c.agendaData || c.agendaData > this.hojeIso()) return;
-    const r = await Api.chamar('concluirAgenda', { cnpj: c.cnpj });
+    let r;
+    try { r = await this.chamar('Atualizando...', 'concluirAgenda', { cnpj: c.cnpj }); } catch (e) { return; }
     if (r.ok) this.iniciar();
   },
 
@@ -537,7 +583,12 @@ const Kanban = {
   // ---------- ações ----------
   async mover(c, novo, sel) {
     sel.disabled = true;
-    const r = await Api.chamar('atualizarCard', { cnpj: c.cnpj, status: novo, obs: c.obs || '' });
+    let r;
+    try {
+      r = await this.chamar('Movendo cliente...', 'atualizarCard', { cnpj: c.cnpj, status: novo, obs: c.obs || '' });
+    } catch (e) {
+      r = { ok: false, erro: 'Falha de conexão.' };
+    }
     if (!r.ok) {
       this.aviso(r.erro || 'Não foi possível mover o card.');
       this.desenharColunas();
