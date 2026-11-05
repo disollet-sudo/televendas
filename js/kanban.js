@@ -1,5 +1,6 @@
 // Tela do kanban: colunas, cards, popup do cliente, mover entre colunas, observações e agendamento de retorno.
 // Usa as ações 'kanban', 'atualizarCard', 'historico', 'notas', 'adicionarNota', 'agendar' e 'concluirAgenda' da API.
+// Filtros: botões de estado (UF) e "Minha base" (cards com baseMeninas = true).
 const Kanban = {
   ROTULOS: {
     A_CHAMAR: 'A chamar',
@@ -20,6 +21,10 @@ const Kanban = {
   quadro: null,
   alvo: '',        // usuária escolhida (só gerente/admin)
   usuarios: null,  // lista de usuárias para o seletor
+  ufsSel: [],      // estados ligados no filtro (vazio = todos)
+  minhaBase: false, // mostra só clientes da base das meninas
+  elTotal: null,
+  elFiltros: null,
 
   // ---------- utilitários ----------
   el(tag, classe, texto) {
@@ -88,7 +93,10 @@ const Kanban = {
       : [];
   },
 
-  resetar() { this.fecharDetalhe(); this.dados = null; this.filtro = ''; this.alvo = ''; this.usuarios = null; },
+  resetar() {
+    this.fecharDetalhe(); this.dados = null; this.filtro = ''; this.alvo = ''; this.usuarios = null;
+    this.ufsSel = []; this.minhaBase = false;
+  },
 
   async iniciar() {
     const area = document.getElementById('conteudo');
@@ -102,6 +110,83 @@ const Kanban = {
     }
     this.dados = r;
     this.desenhar();
+  },
+
+  // ---------- filtros (estado e minha base) ----------
+  estiloFiltros() {
+    if (document.getElementById('kb-filtros-css')) return;
+    const s = document.createElement('style');
+    s.id = 'kb-filtros-css';
+    s.textContent =
+      '.kb-filtros{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0 10px}' +
+      '.kb-filtros .kb-rotulo{color:#555;font-size:13px;margin-right:2px}' +
+      '.kb-filtros button{border:1px solid #cbd5e1;background:#fff;border-radius:14px;padding:3px 11px;cursor:pointer;font-size:13px}' +
+      '.kb-filtros button.ativo{background:#1f2937;color:#fff;border-color:#1f2937}' +
+      '.kb-filtros .kb-minha{font-weight:600}';
+    document.head.appendChild(s);
+  },
+
+  todosCards() {
+    const out = [];
+    const cols = (this.dados && this.dados.colunas) || {};
+    Object.keys(cols).forEach(function (k) { (cols[k] || []).forEach(function (c) { out.push(c); }); });
+    return out;
+  },
+
+  // Os estados do filtro são os que aparecem nos cards do quadro (ou seja, os da usuária)
+  estadosDoQuadro() {
+    const set = {};
+    this.todosCards().forEach(function (c) { if (c.uf) set[String(c.uf).toUpperCase()] = true; });
+    return Object.keys(set).sort();
+  },
+
+  temBaseMeninas() {
+    return this.todosCards().some(function (c) { return typeof c.baseMeninas === 'boolean'; });
+  },
+
+  desenharFiltros() {
+    this.estiloFiltros();
+    const box = this.elFiltros;
+    box.replaceChildren();
+    const ufs = this.estadosDoQuadro();
+
+    if (this.temBaseMeninas()) {
+      const mb = this.el('button', 'kb-minha' + (this.minhaBase ? ' ativo' : ''), 'Minha base');
+      mb.type = 'button';
+      mb.setAttribute('aria-pressed', this.minhaBase ? 'true' : 'false');
+      mb.addEventListener('click', () => { this.minhaBase = !this.minhaBase; this.desenharFiltros(); this.desenharColunas(); });
+      box.appendChild(mb);
+    }
+
+    if (ufs.length > 1) {
+      box.appendChild(this.el('span', 'kb-rotulo', 'Estados:'));
+      ufs.forEach((uf) => {
+        const ligado = this.ufsSel.indexOf(uf) > -1;
+        const b = this.el('button', ligado ? 'ativo' : '', uf);
+        b.type = 'button';
+        b.setAttribute('aria-pressed', ligado ? 'true' : 'false');
+        b.addEventListener('click', () => {
+          const i = this.ufsSel.indexOf(uf);
+          if (i > -1) this.ufsSel.splice(i, 1); else this.ufsSel.push(uf);
+          this.desenharFiltros();
+          this.desenharColunas();
+        });
+        box.appendChild(b);
+      });
+      if (this.ufsSel.length) {
+        const limpar = this.el('button', '', 'Todos');
+        limpar.type = 'button';
+        limpar.addEventListener('click', () => { this.ufsSel = []; this.desenharFiltros(); this.desenharColunas(); });
+        box.appendChild(limpar);
+      }
+    }
+    box.hidden = !box.childNodes.length;
+  },
+
+  passaFiltros(c) {
+    if (this.minhaBase && c.baseMeninas !== true) return false;
+    if (this.ufsSel.length && this.ufsSel.indexOf(String(c.uf || '').toUpperCase()) < 0) return false;
+    return true;
   },
 
   // ---------- desenho ----------
@@ -132,26 +217,33 @@ const Kanban = {
       barra.appendChild(sel);
     }
     barra.append(busca, recarregar);
-    barra.appendChild(this.el('span', 'kb-total', 'Total: ' + this.dados.total));
+    this.elTotal = this.el('span', 'kb-total', 'Total: ' + this.dados.total);
+    barra.appendChild(this.elTotal);
 
+    this.elFiltros = this.el('div', 'kb-filtros');
     this.quadro = this.el('div', 'kb-quadro');
     area.appendChild(barra);
+    area.appendChild(this.elFiltros);
     if (typeof this.dados.aviso === 'string' && this.dados.aviso) {
       area.appendChild(this.el('p', 'kb-aviso-topo', this.dados.aviso));
     }
     area.appendChild(this.quadro);
+    this.desenharFiltros();
     this.desenharColunas();
   },
 
   desenharColunas() {
     const termo = this.filtro.trim().toLowerCase();
     this.quadro.replaceChildren();
+    let visiveis = 0;
     this.dados.ordem.forEach((status) => {
       const todos = this.dados.colunas[status] || [];
-      const lista = todos.filter(function (c) {
+      const lista = todos.filter((c) => {
+        if (!this.passaFiltros(c)) return false;
         if (!termo) return true;
         return [c.razao, c.fantasia, c.cnpj, c.municipio, c.uf].join(' ').toLowerCase().indexOf(termo) >= 0;
       });
+      visiveis += lista.length;
       const col = this.el('div', 'kb-coluna kb-' + status);
       col.appendChild(this.el('h2', 'kb-titulo', (this.ROTULOS[status] || status) + ' (' + lista.length + ')'));
       const corpo = this.el('div', 'kb-corpo');
@@ -159,6 +251,12 @@ const Kanban = {
       col.appendChild(corpo);
       this.quadro.appendChild(col);
     });
+    if (this.elTotal) {
+      const filtrando = this.minhaBase || this.ufsSel.length || termo;
+      this.elTotal.textContent = filtrando
+        ? 'Mostrando: ' + visiveis + ' de ' + this.dados.total
+        : 'Total: ' + this.dados.total;
+    }
   },
 
   card(c) {
