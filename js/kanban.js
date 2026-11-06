@@ -27,6 +27,9 @@ const Kanban = {
   elTotal: null,
   elFiltros: null,
   _carN: 0,        // quantas ações com pop-up de carregamento estão rodando
+  mostrar: {},     // quantos cards já aparecem em cada coluna (carrega aos poucos)
+  PAGINA: 40,      // cards por vez em cada coluna
+  _tb: null,       // atraso da busca
 
   // ---------- utilitários ----------
   el(tag, classe, texto) {
@@ -74,7 +77,7 @@ const Kanban = {
 
   textoEntrega(c) {
     return c.ultimaData
-      ? 'Última entrega: ' + this.dataBr(c.ultimaData) + ' (' + c.dias + ' dias)'
+      ? (c.soPedido ? 'Último pedido: ' : 'Última entrega: ') + this.dataBr(c.ultimaData) + ' (' + c.dias + ' dias)'
       : 'Sem pedido registrado';
   },
 
@@ -140,7 +143,7 @@ const Kanban = {
 
   resetar() {
     this.fecharDetalhe(); this.dados = null; this.filtro = ''; this.alvo = ''; this.usuarios = null;
-    this.ufsSel = []; this.minhaBase = false;
+    this.ufsSel = []; this.minhaBase = false; this.mostrar = {};
   },
 
   async iniciar() {
@@ -148,13 +151,17 @@ const Kanban = {
     this.mostrarCarregando('Carregando clientes...');
     try {
       if (this.ehGestor() && this.usuarios === null) await this.carregarUsuarios();
-      const r = await Api.chamar('kanban', this.alvo ? { verUsuario: this.alvo } : {});
+      const pedido = {};
+      if (this.alvo) pedido.verUsuario = this.alvo;
+      if (this.minhaBase) pedido.minhaBase = true;   // o servidor monta a base das meninas
+      const r = await Api.chamar('kanban', pedido);
       if (!r.ok) {
         this.alvo = '';
         area.textContent = r.erro || 'Não foi possível carregar o kanban.';
         return;
       }
       this.dados = r;
+      this.mostrar = {};
       this.desenhar();
     } finally {
       this.esconderCarregando();
@@ -185,11 +192,11 @@ const Kanban = {
     box.replaceChildren();
     const ufs = this.estadosDoQuadro();
 
-    if (this.temBaseMeninas()) {
+    if (this.minhaBase || this.temBaseMeninas()) {
       const mb = this.el('button', 'kb-minha' + (this.minhaBase ? ' ativo' : ''), 'Minha base');
       mb.type = 'button';
       mb.setAttribute('aria-pressed', this.minhaBase ? 'true' : 'false');
-      mb.addEventListener('click', () => { this.minhaBase = !this.minhaBase; this.desenharFiltros(); this.desenharColunas(); });
+      mb.addEventListener('click', () => { this.minhaBase = !this.minhaBase; this.iniciar(); });
       box.appendChild(mb);
     }
 
@@ -203,23 +210,28 @@ const Kanban = {
         b.addEventListener('click', () => {
           const i = this.ufsSel.indexOf(uf);
           if (i > -1) this.ufsSel.splice(i, 1); else this.ufsSel.push(uf);
-          this.desenharFiltros();
-          this.desenharColunas();
+          this.refiltrar();
         });
         box.appendChild(b);
       });
       if (this.ufsSel.length) {
         const limpar = this.el('button', '', 'Todos');
         limpar.type = 'button';
-        limpar.addEventListener('click', () => { this.ufsSel = []; this.desenharFiltros(); this.desenharColunas(); });
+        limpar.addEventListener('click', () => { this.ufsSel = []; this.refiltrar(); });
         box.appendChild(limpar);
       }
     }
     box.hidden = !box.childNodes.length;
   },
 
+  // mudou filtro de estado: volta a mostrar so os primeiros de cada coluna
+  refiltrar() {
+    this.mostrar = {};
+    this.desenharFiltros();
+    this.desenharColunas();
+  },
+
   passaFiltros(c) {
-    if (this.minhaBase && c.baseMeninas !== true) return false;
     if (this.ufsSel.length && this.ufsSel.indexOf(String(c.uf || '').toUpperCase()) < 0) return false;
     return true;
   },
@@ -233,7 +245,11 @@ const Kanban = {
     const busca = this.el('input', 'kb-busca');
     busca.placeholder = 'Buscar cliente, CNPJ ou cidade';
     busca.value = this.filtro;
-    busca.addEventListener('input', () => { this.filtro = busca.value; this.desenharColunas(); });
+    busca.addEventListener('input', () => {
+      this.filtro = busca.value;
+      clearTimeout(this._tb);
+      this._tb = setTimeout(() => { this.mostrar = {}; this.desenharColunas(); }, 200);
+    });
     const recarregar = this.el('button', 'kb-recarregar', 'Atualizar');
     recarregar.type = 'button';
     recarregar.addEventListener('click', () => this.iniciar());
@@ -267,8 +283,34 @@ const Kanban = {
     this.desenharColunas();
   },
 
+  // coloca os cards na coluna aos poucos (PAGINA por vez) para o app nao travar com milhares de clientes
+  preencherCorpo(corpo, lista, status) {
+    let usados = 0;
+    let botao = null;
+    const mais = () => {
+      if (botao) { botao.remove(); botao = null; }
+      const limite = Math.min(lista.length, this.mostrar[status] || this.PAGINA);
+      for (; usados < limite; usados++) corpo.appendChild(this.card(lista[usados]));
+      if (usados < lista.length) {
+        botao = this.el('button', 'kb-recarregar', 'Ver mais (' + (lista.length - usados) + ')');
+        botao.type = 'button';
+        botao.addEventListener('click', () => { this.mostrar[status] = usados + this.PAGINA; mais(); });
+        corpo.appendChild(botao);
+      }
+    };
+    mais();
+  },
+
   desenharColunas() {
     const termo = this.filtro.trim().toLowerCase();
+    // guarda a rolagem para nao "pular" depois de redesenhar
+    const rolagens = {};
+    this.quadro.querySelectorAll('.kb-coluna').forEach(function (col) {
+      const cp = col.querySelector('.kb-corpo');
+      rolagens[col.dataset.status] = cp ? cp.scrollTop : 0;
+    });
+    const esq = this.quadro.scrollLeft;
+
     this.quadro.replaceChildren();
     let visiveis = 0;
     this.dados.ordem.forEach((status) => {
@@ -280,17 +322,25 @@ const Kanban = {
       });
       visiveis += lista.length;
       const col = this.el('div', 'kb-coluna kb-' + status);
+      col.dataset.status = status;
       col.appendChild(this.el('h2', 'kb-titulo', (this.ROTULOS[status] || status) + ' (' + lista.length + ')'));
       const corpo = this.el('div', 'kb-corpo');
-      lista.forEach((c) => corpo.appendChild(this.card(c)));
+      this.preencherCorpo(corpo, lista, status);
       col.appendChild(corpo);
       this.quadro.appendChild(col);
     });
+
+    this.quadro.scrollLeft = esq;
+    this.quadro.querySelectorAll('.kb-coluna').forEach(function (col) {
+      const t = rolagens[col.dataset.status];
+      if (t) col.querySelector('.kb-corpo').scrollTop = t;
+    });
+
     if (this.elTotal) {
-      const filtrando = this.minhaBase || this.ufsSel.length || termo;
+      const filtrando = this.ufsSel.length || termo;
       this.elTotal.textContent = filtrando
         ? 'Mostrando: ' + visiveis + ' de ' + this.dados.total
-        : 'Total: ' + this.dados.total;
+        : (this.minhaBase ? 'Minha base: ' : 'Total: ') + this.dados.total;
     }
   },
 
@@ -512,7 +562,7 @@ const Kanban = {
     campo('CNPJ / CPF', this.cnpjBr(c.cnpj));
     campo('Cidade', (c.municipio || '') + (c.uf ? ' - ' + c.uf : ''));
     campo('Telefone', c.telefone);
-    campo('Última entrega', c.ultimaData ? this.dataBr(c.ultimaData) + ' (' + c.dias + ' dias)' : 'Sem pedido registrado');
+    campo(c.soPedido ? 'Último pedido' : 'Última entrega', c.ultimaData ? this.dataBr(c.ultimaData) + ' (' + c.dias + ' dias)' : 'Sem pedido registrado');
     campo('Situação no kanban', this.ROTULOS[c.status] || c.status);
     if (c.usuario) campo('Atendido por', c.usuario);
     if (c.agendaData) {
@@ -594,7 +644,26 @@ const Kanban = {
       this.desenharColunas();
       return;
     }
-    // recarrega: mover pode encerrar/fechar retornos e mudar a coluna real do card
-    this.iniciar();
+    this.aplicarMovimento(c, novo);
+  },
+
+  // atualiza so este card na tela (sem baixar o quadro inteiro de novo)
+  aplicarMovimento(c, novo) {
+    const cols = this.dados.colunas;
+    const origem = cols[c.status] || [];
+    const i = origem.indexOf(c);
+    if (i > -1) origem.splice(i, 1);
+
+    const tinhaAgenda = !!c.agendaData;
+    // o servidor encerra retornos vencidos ao mover o card
+    if (c.agendaData && c.agendaData <= this.hojeIso()) { c.agendaData = ''; c.agendaNota = ''; }
+    c.atrasado = false;
+    c.status = novo;
+    if (!c.usuario && !this.ehGestor()) c.usuario = String((App.perfil && App.perfil.usuario) || '').toUpperCase();
+    (cols[novo] = cols[novo] || []).unshift(c);
+    this.desenharColunas();
+
+    // sobrou retorno futuro: o servidor pode ter cancelado, entao confere com ele
+    if (tinhaAgenda && c.agendaData) this.iniciar();
   }
 };
