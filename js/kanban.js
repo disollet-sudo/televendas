@@ -394,4 +394,301 @@ const Kanban = {
 
     // contato
     const tel = this.digitos(c.telefone);
-    const acoes =
+    const acoes = this.el('div', 'kb-acoes');
+    if (tel.length >= 8) {
+      const ligar = this.el('a', 'kb-link', 'Ligar');
+      ligar.href = 'tel:' + this.telLigar(c.telefone); // sempre com 00 na frente
+      ligar.addEventListener('click', () => this.chamou(c));
+      acoes.appendChild(ligar);
+    }
+    if (tel.length >= 10) {
+      const wa = this.el('a', 'kb-link kb-wa', 'WhatsApp');
+      wa.href = 'https://wa.me/' + (tel.indexOf('55') === 0 && tel.length >= 12 ? tel : '55' + tel);
+      wa.target = '_blank';
+      wa.rel = 'noopener';
+      // ao clicar no WhatsApp, quem está em "A chamar" passa para "Em contato";
+      // nos demais casos, um retorno vencido é considerado atendido
+      wa.addEventListener('click', () => {
+        if (c.status === 'A_CHAMAR') this.mover(c, 'EM_CONTATO', sel);
+        else this.chamou(c);
+      });
+      acoes.appendChild(wa);
+    }
+    if (c.telefone) acoes.appendChild(this.el('span', 'kb-tel', c.telefone));
+    box.appendChild(acoes);
+
+    // mover
+    box.appendChild(sel);
+
+    // observações (histórico) e agendamento
+    const det = this.el('details', 'kb-obs');
+    det.appendChild(this.el('summary', '', c.obs ? 'Observação ✎' : 'Observação'));
+    if (c.obs) det.appendChild(this.el('div', 'kb-ultima-obs', 'Última: ' + c.obs));
+    det.appendChild(this.formNota(c, null));
+    box.appendChild(det);
+
+    const ag = this.el('details', 'kb-obs');
+    ag.appendChild(this.el('summary', '', 'Agendar retorno'));
+    ag.appendChild(this.formAgenda(c));
+    box.appendChild(ag);
+
+    // clicar no card abre o popup (menos nos botões, links, seletor, campos e detalhes)
+    box.addEventListener('click', (e) => {
+      if (e.target.closest('a, button, select, textarea, input, details')) return;
+      this.abrirDetalhe(c);
+    });
+    return box;
+  },
+
+  // ---------- observações e agenda ----------
+
+  // observação nova: adiciona ao histórico, nunca sobrescreve
+  formNota(c, aoAdicionar) {
+    const f = this.el('div', 'kb-form-nota');
+    const txt = this.el('textarea', 'kb-texto');
+    txt.rows = 3;
+    txt.placeholder = 'Nova observação (as anteriores ficam guardadas)';
+    const btn = this.el('button', 'kb-salvar', 'Adicionar');
+    btn.type = 'button';
+    btn.addEventListener('click', async () => {
+      const texto = txt.value.trim();
+      if (!texto) return;
+      btn.disabled = true;
+      let r;
+      try {
+        r = await this.chamar('Salvando observação...', 'adicionarNota', { cnpj: c.cnpj, texto: texto });
+      } catch (e) {
+        r = { ok: false, erro: 'Falha de conexão.' };
+      }
+      btn.disabled = false;
+      if (!r.ok) { this.aviso(r.erro || 'Não foi possível salvar a observação.'); return; }
+      c.obs = texto;
+      txt.value = '';
+      btn.textContent = 'Salvo ✓';
+      setTimeout(function () { btn.textContent = 'Adicionar'; }, 1500);
+      if (aoAdicionar) aoAdicionar(r.nota);
+    });
+    f.append(txt, btn);
+    return f;
+  },
+
+  formAgenda(c) {
+    const f = this.el('div', 'kb-form-agenda');
+    const data = this.el('input', 'kb-data');
+    data.type = 'date';
+    data.min = this.hojeIso();
+    if (c.agendaData && c.agendaData >= data.min) data.value = c.agendaData;
+    const nota = this.el('input', 'kb-nota-agenda');
+    nota.placeholder = 'Motivo (opcional)';
+    nota.maxLength = 200;
+    const btn = this.el('button', 'kb-salvar', 'Agendar');
+    btn.type = 'button';
+    btn.addEventListener('click', async () => {
+      if (!data.value) { this.aviso('Escolha a data do retorno.'); return; }
+      btn.disabled = true;
+      let r;
+      try {
+        r = await this.chamar('Agendando retorno...', 'agendar', { cnpj: c.cnpj, data: data.value, nota: nota.value });
+      } catch (e) {
+        r = { ok: false, erro: 'Falha de conexão.' };
+      }
+      btn.disabled = false;
+      if (!r.ok) { this.aviso(r.erro || 'Não foi possível agendar.'); return; }
+      this.aviso('Retorno agendado para ' + this.dataBr(data.value));
+      this.fecharDetalhe();
+      this.iniciar(); // o card pode mudar de coluna
+    });
+    f.append(data, nota, btn);
+    return f;
+  },
+
+  // clicou em Ligar/WhatsApp: considera o retorno vencido como atendido
+  async chamou(c) {
+    if (!c.agendaData || c.agendaData > this.hojeIso()) return;
+    let r;
+    try { r = await this.chamar('Atualizando...', 'concluirAgenda', { cnpj: c.cnpj }); } catch (e) { return; }
+    if (r.ok) this.iniciar();
+  },
+
+  async carregarNotas(c, lista) {
+    let r;
+    try { r = await Api.chamar('notas', { cnpj: c.cnpj }); } catch (e) { r = { ok: false }; }
+    if (!lista.isConnected) return;
+    lista.replaceChildren();
+    if (!r || !r.ok) { lista.textContent = (r && r.erro) || 'Não foi possível carregar as observações.'; return; }
+    if (!r.notas.length) { lista.textContent = 'Nenhuma observação ainda.'; return; }
+    r.notas.forEach((n) => this.notaNaLista(lista, n, false));
+  },
+
+  notaNaLista(lista, n, topo) {
+    if (!lista.querySelector('.kb-nota')) lista.replaceChildren();
+    const d = this.el('div', 'kb-nota');
+    d.appendChild(this.el('small', '', (n.quando ? n.quando + ' · ' : '') + (n.usuario || '')));
+    d.appendChild(this.el('div', '', n.texto));
+    if (topo) lista.prepend(d); else lista.appendChild(d);
+  },
+
+  // ---------- popup do cliente ----------
+  estiloModal() {
+    if (document.getElementById('kb-modal-css')) return;
+    const s = document.createElement('style');
+    s.id = 'kb-modal-css';
+    s.textContent =
+      '.kb-modal-fundo{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000;padding:12px}' +
+      '.kb-modal{background:#fff;border-radius:10px;max-width:820px;width:100%;max-height:90vh;overflow:auto;padding:18px 20px;box-shadow:0 10px 30px rgba(0,0,0,.3);position:relative}' +
+      '.kb-modal-fechar{position:absolute;top:8px;right:12px;border:0;background:none;font-size:26px;cursor:pointer;line-height:1;color:#1f2937}' +
+      '.kb-modal h3{margin:0 28px 2px 0;font-size:18px}' +
+      '.kb-modal-sub{color:#555;margin:0 0 12px}' +
+      '.kb-modal-dados{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 16px;margin-bottom:14px}' +
+      '.kb-modal-dados small{display:block;color:#777;font-size:11px;text-transform:uppercase}' +
+      '.kb-modal h4{margin:14px 0 6px;font-size:15px}' +
+      '.kb-hist{width:100%;border-collapse:collapse;font-size:13px}' +
+      '.kb-hist th,.kb-hist td{text-align:left;padding:5px 8px;border-bottom:1px solid #e5e5e5}' +
+      '.kb-hist th{background:#f4f4f4;position:sticky;top:0}' +
+      '.kb-hist td.num{text-align:right;white-space:nowrap}' +
+      '.kb-hist-caixa{max-height:320px;overflow:auto;border:1px solid #e5e5e5;border-radius:6px}';
+    document.head.appendChild(s);
+  },
+
+  fecharDetalhe() {
+    const f = document.getElementById('kb-modal-fundo');
+    if (f) f.remove();
+    if (this._esc) { document.removeEventListener('keydown', this._esc); this._esc = null; }
+  },
+
+  abrirDetalhe(c) {
+    this.fecharDetalhe();
+    this.estiloModal();
+
+    const fundo = this.el('div', 'kb-modal-fundo');
+    fundo.id = 'kb-modal-fundo';
+    fundo.addEventListener('click', (e) => { if (e.target === fundo) this.fecharDetalhe(); });
+    this._esc = (e) => { if (e.key === 'Escape') this.fecharDetalhe(); };
+    document.addEventListener('keydown', this._esc);
+
+    const caixa = this.el('div', 'kb-modal');
+    const x = this.el('button', 'kb-modal-fechar', '×');
+    x.type = 'button';
+    x.setAttribute('aria-label', 'Fechar');
+    x.addEventListener('click', () => this.fecharDetalhe());
+    caixa.appendChild(x);
+
+    caixa.appendChild(this.el('h3', '', c.razao));
+    if (c.fantasia) caixa.appendChild(this.el('p', 'kb-modal-sub', c.fantasia));
+    if (c.devendo) caixa.appendChild(this.el('div', 'kb-devendo', this.textoDevendo(c)));
+
+    const dados = this.el('div', 'kb-modal-dados');
+    const campo = (rotulo, valor) => {
+      const d = this.el('div');
+      d.appendChild(this.el('small', '', rotulo));
+      d.appendChild(this.el('span', '', valor || '—'));
+      dados.appendChild(d);
+    };
+    campo('CNPJ / CPF', this.cnpjBr(c.cnpj));
+    campo('Cidade', (c.municipio || '') + (c.uf ? ' - ' + c.uf : ''));
+    campo('Telefone', c.telefone);
+    campo(c.soPedido ? 'Último pedido' : 'Última entrega', c.ultimaData ? this.dataBr(c.ultimaData) + ' (' + c.dias + ' dias)' : 'Sem pedido registrado');
+    campo('Situação no kanban', this.ROTULOS[c.status] || c.status);
+    if (c.usuario) campo('Atendido por', c.usuario);
+    if (c.agendaData) {
+      campo('Retorno', this.dataBr(c.agendaData) + (c.atrasado ? ' (atrasado)' : '') + (c.agendaNota ? ' · ' + c.agendaNota : ''));
+    }
+    caixa.appendChild(dados);
+
+    caixa.appendChild(this.el('h4', '', 'Agendar retorno'));
+    caixa.appendChild(this.formAgenda(c));
+
+    caixa.appendChild(this.el('h4', '', 'Observações'));
+    const listaNotas = this.el('div', 'kb-notas', 'Carregando...');
+    caixa.appendChild(this.formNota(c, (n) => this.notaNaLista(listaNotas, n, true)));
+    caixa.appendChild(listaNotas);
+    this.carregarNotas(c, listaNotas);
+
+    const titulo = this.el('h4', '', 'Histórico de pedidos');
+    const area = this.el('div', '', 'Carregando pedidos...');
+    caixa.append(titulo, area);
+
+    fundo.appendChild(caixa);
+    document.body.appendChild(fundo);
+
+    this.carregarHistorico(c, titulo, area, fundo);
+  },
+
+  async carregarHistorico(c, titulo, area, fundo) {
+    let r;
+    try {
+      r = await Api.chamar('historico', { cnpj: c.cnpj });
+    } catch (e) {
+      r = { ok: false, erro: 'Falha ao buscar os pedidos.' };
+    }
+    if (!fundo.isConnected) return; // popup já foi fechado
+    area.replaceChildren();
+    if (!r || !r.ok) {
+      area.textContent = (r && r.erro) || 'Não foi possível carregar o histórico.';
+      return;
+    }
+    titulo.textContent = 'Histórico de pedidos (' + r.total + ' · ' + this.moeda(r.somaValor) + ')';
+    if (!r.total) {
+      area.textContent = 'Nenhum pedido encontrado para este cliente.';
+      return;
+    }
+    const caixa = this.el('div', 'kb-hist-caixa');
+    const tab = this.el('table', 'kb-hist');
+    const cab = this.el('tr');
+    ['Pedido', 'Data', 'Valor', 'Entrega', 'Situação', 'Repre'].forEach((t) => cab.appendChild(this.el('th', '', t)));
+    const thead = this.el('thead');
+    thead.appendChild(cab);
+    tab.appendChild(thead);
+    const corpo = this.el('tbody');
+    r.pedidos.forEach((p) => {
+      const tr = this.el('tr');
+      tr.appendChild(this.el('td', '', p.pedido));
+      tr.appendChild(this.el('td', '', this.dataBr(p.data)));
+      tr.appendChild(this.el('td', 'num', p.valor));
+      tr.appendChild(this.el('td', '', /^\d{4}-\d{2}-\d{2}$/.test(p.entregaTxt) ? this.dataBr(p.entregaTxt) : p.entregaTxt));
+      tr.appendChild(this.el('td', '', p.situacao));
+      tr.appendChild(this.el('td', '', p.repre));
+      corpo.appendChild(tr);
+    });
+    tab.appendChild(corpo);
+    caixa.appendChild(tab);
+    area.appendChild(caixa);
+  },
+
+  // ---------- ações ----------
+  async mover(c, novo, sel) {
+    sel.disabled = true;
+    let r;
+    try {
+      r = await this.chamar('Movendo cliente...', 'atualizarCard', { cnpj: c.cnpj, status: novo, obs: c.obs || '' });
+    } catch (e) {
+      r = { ok: false, erro: 'Falha de conexão.' };
+    }
+    if (!r.ok) {
+      this.aviso(r.erro || 'Não foi possível mover o card.');
+      this.desenharColunas();
+      return;
+    }
+    this.aplicarMovimento(c, novo);
+  },
+
+  // atualiza so este card na tela (sem baixar o quadro inteiro de novo)
+  aplicarMovimento(c, novo) {
+    const cols = this.dados.colunas;
+    const origem = cols[c.status] || [];
+    const i = origem.indexOf(c);
+    if (i > -1) origem.splice(i, 1);
+
+    const tinhaAgenda = !!c.agendaData;
+    // o servidor encerra retornos vencidos ao mover o card
+    if (c.agendaData && c.agendaData <= this.hojeIso()) { c.agendaData = ''; c.agendaNota = ''; }
+    c.atrasado = false;
+    c.status = novo;
+    if (!c.usuario && !this.ehGestor()) c.usuario = String((App.perfil && App.perfil.usuario) || '').toUpperCase();
+    (cols[novo] = cols[novo] || []).unshift(c);
+    this.desenharColunas();
+
+    // sobrou retorno futuro: o servidor pode ter cancelado, entao confere com ele
+    if (tinhaAgenda && c.agendaData) this.iniciar();
+  }
+};
